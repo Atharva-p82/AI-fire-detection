@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useLanguage } from "../context/LanguageContext";
 import { API_URL } from "../config";
 
@@ -11,17 +11,24 @@ export interface Alert {
   type: string;
   confidence: number;
   snapshot?: string;
+  camera_id?: number | null;
+  camera_name?: string | null;
 }
 
 interface AlertPanelProps {
   alerts: Alert[];
   error: boolean;
+  liveAlert?: Alert | null;
 }
 
-const AlertPanel = ({ alerts, error }: AlertPanelProps) => {
+const AlertPanel = ({ alerts, error, liveAlert }: AlertPanelProps) => {
   const { t } = useLanguage();
   const [isSoundEnabled, setIsSoundEnabled] = useState(false);
   const [selectedSnapshot, setSelectedSnapshot] = useState<string | null>(null);
+  const audioContext = useRef<AudioContext | null>(null);
+  const heardAlertIds = useRef(new Set<string>());
+
+  useEffect(() => () => { void audioContext.current?.close(); }, []);
 
   // Sync sound settings with backend on mount
   useEffect(() => {
@@ -39,35 +46,63 @@ const AlertPanel = ({ alerts, error }: AlertPanelProps) => {
       }
     };
     fetchSoundSetting();
+    window.addEventListener("settings-updated", fetchSoundSetting);
+    return () => window.removeEventListener("settings-updated", fetchSoundSetting);
   }, []);
 
   // Audio effect for alarms
   useEffect(() => {
-    if (alerts.length > 0 && isSoundEnabled) {
-      const latest = alerts[0];
-      // Play a short alert beep if it's a recent event with a confidence threshold
-      if (latest.confidence > 0.4) {
-        // High quality premium alarm sound (google short alarm beep)
-        const audio = new Audio("https://actions.google.com/sounds/v1/alarms/digital_watch_alarm_long.ogg");
-        audio.volume = 0.6;
-        const playPromise = audio.play();
-        if (playPromise !== undefined) {
-          playPromise.catch(e => console.warn("Audio autoplay blocked by browser policies", e));
-        }
-      }
+    if (!liveAlert) return;
+    const latest = liveAlert;
+    const key = String(latest.id ?? `${latest.timestamp}:${latest.type}:${latest.camera_id ?? "unknown"}`);
+    if (heardAlertIds.current.has(key)) return;
+    heardAlertIds.current.add(key);
+    // Bound memory during long monitoring sessions.
+    if (heardAlertIds.current.size > 1000) {
+      const oldest = heardAlertIds.current.values().next().value;
+      if (oldest !== undefined) heardAlertIds.current.delete(oldest);
     }
-  }, [alerts, isSoundEnabled]);
+    // Loading historical alerts or changing sound settings must not replay an alarm.
+    if (!isSoundEnabled) return;
+    const play = async () => {
+      const context = audioContext.current ?? new AudioContext();
+      audioContext.current = context;
+      await context.resume();
+      for (let index = 0; index < 3; index++) {
+        const start = context.currentTime + index * 0.4;
+        const oscillator = context.createOscillator();
+        const gain = context.createGain();
+        oscillator.type = "sine";
+        oscillator.frequency.value = 880;
+        gain.gain.setValueAtTime(0, start);
+        gain.gain.linearRampToValueAtTime(0.18, start + 0.02);
+        gain.gain.linearRampToValueAtTime(0, start + 0.25);
+        oscillator.connect(gain);
+        gain.connect(context.destination);
+        oscillator.start(start);
+        oscillator.stop(start + 0.3);
+        oscillator.onended = () => { oscillator.disconnect(); gain.disconnect(); };
+      }
+    };
+    void play().catch(error => console.warn("Enable sound with the alarm button to allow browser playback", error));
+  }, [liveAlert, isSoundEnabled]);
 
   const handleToggleSound = async () => {
     const nextVal = !isSoundEnabled;
+    if (nextVal) {
+      audioContext.current ??= new AudioContext();
+      void audioContext.current.resume().catch(error => console.warn("Sound unavailable", error));
+    }
     setIsSoundEnabled(nextVal);
     try {
-      await fetch(`${API_URL}/settings`, {
+      const response = await fetch(`${API_URL}/settings`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ key: "alarm_sound_enabled", value: nextVal ? "true" : "false" })
       });
+      if (!response.ok) throw new Error("Sound setting was not saved");
     } catch (e) {
+      setIsSoundEnabled(!nextVal);
       console.error("Failed to save sound settings on backend", e);
     }
   };
@@ -174,6 +209,7 @@ const AlertPanel = ({ alerts, error }: AlertPanelProps) => {
                   <p className="text-xs text-white/60">
                     {t.alerts.confidence}: %{(alert.confidence * 100).toFixed(1)}
                   </p>
+                  {alert.camera_name && <span className="text-[10px] text-gray-400">{alert.camera_name}</span>}
                   {alert.snapshot && (
                     <span className="text-[10px] text-blue-400 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1">
                       <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>

@@ -2,7 +2,13 @@ import cv2
 import threading
 import time
 import os
+import re
+import uuid
+from collections import deque
+from datetime import datetime, timezone
 import notification
+
+from detection_policy import DetectionSettings, advance_persistence, validate_roi
 
 # Ensure snapshots directory exists
 SNAPSHOT_DIR = "snapshots"
@@ -10,7 +16,7 @@ if not os.path.exists(SNAPSHOT_DIR):
     os.makedirs(SNAPSHOT_DIR)
 
 class Camera:
-    def __init__(self, id, source, name="Camera", is_active=True):
+    def __init__(self, id, source, name="Camera", is_active=True, roi=None):
         self.id = id
         self.source = source
         self.name = name
@@ -20,8 +26,17 @@ class Camera:
         self.last_frame = None
         self.last_annotated_frame = None
         self.detection_persistence = {}
+        self.detection_settings = None
+        self.policy_lock = threading.Lock()
+        self.roi = validate_roi(roi or [])
         self.event_cooldowns = {}
         self.frame_count = 0
+        self.frames_processed = 0
+        self.inference_ms = 0.0
+        self.last_frame_at = None
+        self.processing_fps = 0.0
+        self.processed_frame_times = deque(maxlen=30)
+        self.last_inference_error = None
         
         self.status = "connecting"  # connecting, connected, disconnected
         self.consecutive_failures = 0
@@ -33,6 +48,9 @@ class Camera:
 
     def _connect(self):
         with self.lock:
+            if not self.running or not self.is_active:
+                self.status = "disconnected"
+                return
             self.status = "connecting"
             if self.cap is not None:
                 self.cap.release()
@@ -40,7 +58,7 @@ class Camera:
             # Check if source is integer (webcam index)
             try:
                 src = int(self.source)
-            except ValueError:
+            except (TypeError, ValueError):
                 src = self.source
                 
             self.cap = cv2.VideoCapture(src)
@@ -86,6 +104,8 @@ class Camera:
 
     def release(self):
         self.running = False
+        with self.policy_lock:
+            self.detection_persistence.clear()
         with self.lock:
             self.status = "disconnected"
             if self.cap is not None:
@@ -115,13 +135,15 @@ class CameraManager:
                 name = db_cam["name"]
                 source = db_cam["source"]
                 is_active = db_cam["is_active"] == 1
+                roi = validate_roi(db_cam.get("roi", []))
                 
                 if cam_id in self.cameras:
                     self.cameras[cam_id].name = name
                     self.cameras[cam_id].source = source
                     self.cameras[cam_id].is_active = is_active
+                    self.cameras[cam_id].roi = roi
                 else:
-                    cam = Camera(cam_id, source, name, is_active)
+                    cam = Camera(cam_id, source, name, is_active, roi=roi)
                     self.cameras[cam_id] = cam
             print(f"Loaded {len(db_cams)} cameras from database.")
         except Exception as e:
@@ -160,6 +182,28 @@ class CameraManager:
             return True
         return False
 
+    def set_camera_roi(self, camera_id, points):
+        """Persist a monitoring polygon and start a new confirmation sequence."""
+        import database
+        roi = validate_roi(points)
+        cam = self.cameras.get(camera_id)
+        if cam is None:
+            return False
+        with cam.policy_lock:
+            if not database.set_db_camera_roi(camera_id, roi):
+                return False
+            cam.roi = roi
+            cam.detection_persistence.clear()
+        return True
+
+    def shutdown(self):
+        """Stop background processing and close all camera devices."""
+        self.running = False
+        for cam in list(self.cameras.values()):
+            cam.release()
+        if self.thread is not threading.current_thread():
+            self.thread.join(timeout=3)
+
     def get_frame(self, camera_id):
         """Get the latest annotated frame for a camera."""
         if camera_id in self.cameras:
@@ -178,77 +222,90 @@ class CameraManager:
                 if not cam or not cam.running or not cam.is_active:
                     continue
 
-                success, frame = cam.read()
-                if not success:
-                    cam.trigger_reconnect()
-                    continue
-
-                cam.frame_count += 1
-                
-                # Process detection every 3rd frame
-                if cam.frame_count % 3 == 0:
-                    annotated_frame, detections = self.detector.process_frame(frame)
-                    cam.last_annotated_frame = annotated_frame
-                    
-                    if detections:
-                        self._process_detections(cam, detections, annotated_frame)
-                    else:
-                        cam.detection_persistence = {}
+                try:
+                    success, frame = cam.read()
+                    if not success:
+                        with cam.policy_lock:
+                            cam.detection_persistence.clear()
+                        cam.trigger_reconnect()
+                        continue
+                    cam.frame_count += 1
+                    # Only inference frames contribute to alert persistence.
+                    if cam.frame_count % 3 == 0:
+                        self._process_camera_frame(cam, frame)
+                except Exception as exc:
+                    # A failing camera, model or event must not stop the other cameras.
+                    with cam.policy_lock:
+                        cam.detection_persistence.clear()
+                    error = str(exc)
+                    if cam.last_inference_error != error:
+                        print(f"[Camera {cam.id}] Processing error: {error}")
+                    cam.last_inference_error = error
             
             time.sleep(0.01)
 
-    def _process_detections(self, cam, detections, annotated_frame):
-        current_classes = set()
-        
-        # Get dynamic settings from database
+    @staticmethod
+    def _get_detection_settings():
         import database
         try:
-            conf_threshold = float(database.get_setting("ai_confidence_threshold", "0.25"))
-            persistence_limit = int(database.get_setting("ai_persistence_frames", "2"))
-            cooldown_seconds = float(database.get_setting("ai_cooldown_seconds", "5"))
+            return DetectionSettings.from_mapping(database.get_all_settings())
         except Exception:
-            conf_threshold = 0.25
-            persistence_limit = 2
-            cooldown_seconds = 5
-        
-        for det in detections:
-            cls_name = det["class"]
-            conf = det["confidence"]
-            
-            if conf < conf_threshold:
-                continue
-                
-            current_classes.add(cls_name)
-            
-            # Increment persistence
-            cam.detection_persistence[cls_name] = cam.detection_persistence.get(cls_name, 0) + 1
-            
-            # Trigger Alert
-            if cam.detection_persistence[cls_name] >= persistence_limit or conf > 0.6:
-                current_time = time.time()
-                last_time = cam.event_cooldowns.get(cls_name, 0)
-                
-                if current_time - last_time > cooldown_seconds:
-                    self._save_event(cam, cls_name, conf, annotated_frame)
-                    cam.event_cooldowns[cls_name] = current_time
+            return DetectionSettings()
 
-        # Cleanup persistence
-        for existing_cls in list(cam.detection_persistence.keys()):
-            if existing_cls not in current_classes:
-                cam.detection_persistence[existing_cls] = 0
+    def _process_camera_frame(self, cam, frame):
+        settings = self._get_detection_settings()
+        confidence = settings.inference_confidence(self.detector.model_info()["classes"])
+        started = time.perf_counter()
+        try:
+            annotated_frame, detections = self.detector.process_frame(
+                frame, confidence=confidence, iou=settings.iou,
+            )
+        finally:
+            cam.inference_ms = round((time.perf_counter() - started) * 1000, 2)
+        cam.last_inference_error = None
+        cam.last_annotated_frame = annotated_frame
+        cam.frames_processed += 1
+        cam.last_frame_at = datetime.now(timezone.utc).isoformat()
+        cam.processed_frame_times.append(time.perf_counter())
+        if len(cam.processed_frame_times) > 1:
+            elapsed = cam.processed_frame_times[-1] - cam.processed_frame_times[0]
+            cam.processing_fps = round((len(cam.processed_frame_times) - 1) / elapsed, 2) if elapsed > 0 else 0.0
+        self._process_detections(cam, detections, annotated_frame, settings=settings)
+
+    def _process_detections(self, cam, detections, annotated_frame, settings=None):
+        settings = settings or self._get_detection_settings()
+        with cam.policy_lock:
+            # Confirmation frames must all satisfy the same detection policy.
+            if getattr(cam, "detection_settings", None) != settings:
+                cam.detection_persistence.clear()
+                cam.detection_settings = settings
+            confirmed = advance_persistence(
+                cam.detection_persistence, detections, settings,
+                roi=cam.roi, frame_shape=annotated_frame.shape,
+            )
+            current_time = time.monotonic()
+            for cls_name, detection in confirmed.items():
+                last_time = cam.event_cooldowns.get(cls_name)
+                if last_time is None or current_time - last_time >= settings.cooldown_seconds:
+                    self._save_event(cam, cls_name, detection["confidence"], annotated_frame)
+                    cam.event_cooldowns[cls_name] = current_time
 
     def _save_event(self, cam, cls_name, conf, frame):
         # Save Snapshot
         timestamp_str = time.strftime("%Y%m%d_%H%M%S")
-        filename = f"event_{timestamp_str}_{cam.id}_{cls_name}.jpg"
+        safe_class = re.sub(r"[^a-z0-9_-]", "_", cls_name.lower())
+        filename = f"event_{timestamp_str}_{cam.id}_{safe_class}_{uuid.uuid4().hex[:8]}.jpg"
         filepath = os.path.join(SNAPSHOT_DIR, filename)
         
-        cv2.imwrite(filepath, frame)
+        if not cv2.imwrite(filepath, frame):
+            raise OSError("Could not save the event snapshot")
         
         # Database
         snapshot_url = f"/snapshots/{filename}"
         import database
-        event_id, timestamp = database.add_event(cls_name, conf, snapshot_url)
+        event_id, timestamp = database.add_event(
+            cls_name, conf, snapshot_url, camera_id=cam.id, camera_name=cam.name,
+        )
         
         print(f"[Cam {cam.id}] Detected {cls_name} ({conf:.2f})")
         
@@ -261,6 +318,7 @@ class CameraManager:
                     "type": cls_name,
                     "confidence": conf,
                     "snapshot": snapshot_url,
+                    "camera_id": cam.id,
                     "camera_name": cam.name
                 })
             except Exception as e:
@@ -268,4 +326,4 @@ class CameraManager:
         
         # Notifications
         threading.Thread(target=notification.trigger_notifications, 
-                       args=(cls_name, conf, filepath)).start()
+                       args=(cls_name, conf, filepath), daemon=True).start()
