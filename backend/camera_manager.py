@@ -30,6 +30,7 @@ class Camera:
         self.policy_lock = threading.Lock()
         self.roi = validate_roi(roi or [])
         self.event_cooldowns = {}
+        self.active_incidents = {}
         self.frame_count = 0
         self.frames_processed = 0
         self.inference_ms = 0.0
@@ -284,11 +285,22 @@ class CameraManager:
                 roi=cam.roi, frame_shape=annotated_frame.shape,
             )
             current_time = time.monotonic()
+            # One alert per continuous fire incident.
             for cls_name, detection in confirmed.items():
-                last_time = cam.event_cooldowns.get(cls_name)
-                if last_time is None or current_time - last_time >= settings.cooldown_seconds:
-                    self._save_event(cam, cls_name, detection["confidence"], annotated_frame)
-                    cam.event_cooldowns[cls_name] = current_time
+                last_seen = cam.active_incidents.get(cls_name)
+
+                if last_seen is None or current_time - last_seen >= 10:
+                    self._save_event(
+                        cam, cls_name, detection["confidence"], annotated_frame
+                    )
+
+                cam.active_incidents[cls_name] = current_time
+
+            # Re-arm after 10 seconds without confirmed detection.
+            for cls_name, last_seen in list(cam.active_incidents.items()):
+                if cls_name not in confirmed and current_time - last_seen >= 10:
+                    del cam.active_incidents[cls_name]
+                    print(f"[Cam {cam.id}] Fire incident cleared: {cls_name}")
 
     def _save_event(self, cam, cls_name, conf, frame):
         # Save Snapshot
