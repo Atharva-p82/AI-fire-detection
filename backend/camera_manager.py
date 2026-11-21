@@ -338,4 +338,4 @@ class CameraManager:
         
         # Notifications
         threading.Thread(target=notification.trigger_notifications, 
-                       args=(cls_name, conf, filepath), daemon=True).start()
+                       args=(cls_name, conf, filepath, cam.id), daemon=True).start()
