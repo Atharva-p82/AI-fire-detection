@@ -40,14 +40,14 @@ cd AI-fire-detection
 Use the backend virtual environment already documented by the project. If creating it from scratch:
 \`\`\`powershell
 cd backend
-python -m venv venv
+py -3.12 -m venv venv
 .\\venv\\Scripts\\Activate.ps1
 python -m pip install --upgrade pip
 python -m pip install --index-url https://download.pytorch.org/whl/cpu "torch==2.5.1+cpu" "torchvision==0.20.1+cpu"
 pip install -r requirements.txt
 cd ..
 \`\`\`
-The PyTorch command shown is the repository's CPU setup; do not overwrite a working CUDA environment with CPU packages. Run the benchmark from the repository root with the backend environment active. By default it loads backend/best.pt. To select another checkpoint set:
+Python 3.12 is the version documented as validated in the project README. The PyTorch command shown is the repository's CPU setup; do not overwrite a working CUDA environment with CPU packages. Run the benchmark from the repository root with the backend environment active. By default it loads backend/best.pt. To select another checkpoint set:
 \`\`\`powershell
 $env:FIRE_MODEL_PATH="C:\\full\\path\\to\\best.pt"
 \`\`\`
