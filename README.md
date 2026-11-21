@@ -1,149 +1,241 @@
-# Fire Guard AI
+# 🔥 Fire Guard AI – Real-Time Fire Detection & Monitoring System
 
-Fire Guard AI is a camera monitoring and fire detection system using real-time computer vision. The bundled model detects **Fire only**. Smoke detection requires a compatible, separately validated model containing a smoke class.
+**Developed and maintained by Atharva Pawar**
+B.Tech Computer Science & Engineering | IIIT Raichur
 
-### Live Demo
-Experience the live dashboard: [https://ai-fire-detection-drab.vercel.app/](https://ai-fire-detection-drab.vercel.app/)
+Fire Guard AI is an AI-powered camera monitoring and fire detection platform designed to identify fire incidents through real-time computer vision. It combines YOLO-based object detection, multi-camera monitoring, automated alerts, and an interactive dashboard to help users monitor environments and respond to potential fire hazards.
 
-[![Dashboard Live Demo](docs/screenshots/dashboard.png)](https://ai-fire-detection-drab.vercel.app/)
+> **Model limitation:** The currently bundled model detects Fire only. Smoke detection requires a separately validated model containing a Smoke class.
 
-## Features
+## 🌐 Live Demo
 
-### Real-Time Detection
-* Real-time fire detection using the bundled YOLO model, with WebSocket updates on the dashboard.
-* The settings screen shows the classes supported by the loaded model, including whether smoke detection is available.
+[**Launch Fire Guard AI Dashboard**](https://ai-fire-detection-drab.vercel.app/)
 
-### Persistent Multi-Camera Grid
-* Monitor unlimited cameras simultaneously. All camera sources are persisted in a SQLite database, meaning they are saved even if the server restarts.
-* Support for enabling/disabling cameras temporarily from the dashboard without deleting them.
 
-### Automatic Reconnection
-* Intelligent connection monitoring. If an RTSP or webcam source is disconnected, the system safely marks its status and attempts to reconnect asynchronously in the background every 10 seconds without blocking the pipeline.
-* Interactive camera status indicators (Connected, Connecting, Disconnected, Inactive) with beautiful dark-mode placeholder states.
 
-### Dynamic AI & Alarm Settings
-* Configure AI Confidence Threshold, Alarm Cooldown, and Detection Persistence (number of frames) dynamically from the Settings Panel without restarting the application.
-* Toggle siren sound alert directly in the UI, synchronized globally.
-* Configure separate fire/smoke confidence overrides and the IoU threshold. Empty class overrides inherit the global confidence threshold.
-* Confirmation counts consecutive processed frames, once per class in each frame. High confidence and multiple boxes in one frame do not bypass verification.
-* Changing detection settings starts a fresh confirmation sequence while retaining alarm cooldowns.
+## ✨ Key Features
 
-### Camera Detection Regions & Performance
-* Draw a polygon for each camera to restrict alarm eligibility. The center of a detection box must be inside the polygon; an empty polygon enables the full frame.
-* Regions are saved in SQLite and use normalized coordinates, so they work across video resolutions.
-* View measured processing FPS, inference time, and processed frame counts for each camera.
+### 1. Real-Time Fire Detection
 
-### Image Analysis
-* Upload a JPEG, PNG, WebP or BMP image from the dashboard and review the annotated result and detection confidence.
-* Image analysis supports confidence and IoU overrides and does not create camera events or send notifications.
-* Uploads are limited to 10 MiB and 16 megapixels. This screen analyzes images; uploaded video analysis is not included.
+- YOLO-based fire detection through live camera feeds.
+- Real-time dashboard updates using WebSockets.
+- Configurable detection confidence thresholds.
+- Consecutive-frame confirmation to reduce false alarms.
 
-### Statistics & History
-* Interactive weekly statistics charts.
-* Comprehensive history modal enabling users to view and search past fire/smoke detection events along with high-definition snapshots of the event moment.
-* Filter events by camera, type, inclusive date range and minimum confidence, with pagination and a matching CSV download.
-* Event records retain the camera name even when that camera is later deleted. Older records without camera metadata remain accessible.
-* The daily count reflects all events recorded today, rather than the recent-alert list size.
+### 2. Multi-Camera Monitoring
 
-### Instant Notifications
-* Telegram: Receive real-time photos of the detected incident directly to your phone.
-* Email: Detailed incident reports sent to your inbox.
+- Monitor multiple webcam and IP camera streams.
+- Persistent camera configurations using SQLite.
+- Enable or disable individual cameras.
+- Automatic reconnection when camera connections are interrupted.
+- Live camera connection status indicators.
 
-## Tech Stack
+### 3. Intelligent Detection Configuration
 
-* Backend: Python, FastAPI, OpenCV, Ultralytics (YOLOv8), SQLite, WebSockets
-* Frontend: Next.js, React, Tailwind CSS, Recharts
-* AI Model: Bundled custom YOLO model for Fire; configurable local model path
-* Font assets and alarm audio are served or generated locally, without a Google network dependency.
+- Dynamically adjust AI confidence thresholds.
+- Configure alarm cooldown periods.
+- Set detection persistence requirements.
+- Configure IoU thresholds and class-specific confidence overrides.
+- Define polygon-based detection regions for individual cameras.
 
-## Installation
+### 4. Image Analysis
 
-Follow these steps to run the project locally.
+- Upload JPEG, PNG, WebP, and BMP images.
+- View annotated detection results.
+- Review detection confidence scores.
+- Supports confidence and IoU overrides.
+- Upload limits: 10 MB and 16 megapixels.
+
+### 5. Detection History & Analytics
+
+- Interactive weekly statistics.
+- Historical fire detection records.
+- Search and filter events by camera, date, type, and confidence.
+- View captured incident snapshots.
+- Export filtered detection history as CSV.
+
+### 6. Automated Notifications
+
+- Telegram notifications with incident photographs.
+- Email-based incident reports.
+- Configurable alarm cooldown to prevent repeated notifications.
+- Integrated siren alerts.
+
+## 🛠️ Technology Stack
+
+| Component       | Technologies                 |
+| --------------- | ---------------------------- |
+| Frontend        | Next.js, React, Tailwind CSS |
+| Backend         | Python, FastAPI              |
+| Computer Vision | OpenCV                       |
+| AI Model        | YOLOv8, Ultralytics          |
+| Database        | SQLite                       |
+| Communication   | REST API, WebSockets         |
+| Visualization   | Recharts                     |
+| Notifications   | Telegram, SMTP Email         |
+
+## 🏗️ System Architecture
+
+```text
+       Camera / IP Camera
+               |
+               v
+       Camera Management
+               |
+               v
+       OpenCV Frame Processing
+               |
+               v
+        YOLO Fire Detection
+               |
+               v
+      Detection Verification
+               |
+               v
+      Region & Cooldown Check
+               |
+        +------+------+
+        |             |
+        v             v
+   Save Event     Notifications
+        |          Telegram
+        |          Email
+        v
+      SQLite
+        |
+        v
+    FastAPI Backend
+        |
+     WebSockets
+        |
+        v
+   Next.js Dashboard
+```
+
+## 💻 Installation & Setup
 
 ### Prerequisites
-* Python 3.10+ (validated with Python 3.12)
-* Node.js 20.9+ (validated with Node.js 24)
-* Git
 
-### Easy Setup (Windows Only)
-You can start the backend and frontend simultaneously with a single command. Double-click or run:
-```bash
-start.bat
-```
-This script will automatically detect your Python installation, create a virtual environment, install requirements, and run both servers.
-
-### Manual Setup
+- Python 3.10 or above (Python 3.12 validated)
+- Node.js 20.9 or above
+- Git
+- Webcam or accessible IP camera
 
 ### 1. Clone the Repository
+
 ```bash
-git clone https://github.com/vahapogut/AI-fire-detection.git
+git clone https://github.com/Atharva-p82/AI-fire-detection.git
 cd AI-fire-detection
 ```
 
 ### 2. Backend Setup
+
 ```bash
 cd backend
-# Create virtual environment
-python -m venv venv
-# Activate on Windows:
-venv\Scripts\activate
-# Activate on Mac/Linux:
-# source venv/bin/activate
 
-# Install the validated CPU-only PyTorch pair for cloud development
+python -m venv venv
+
+# Windows
+venv\Scripts\activate
+
+# Install CPU-compatible PyTorch
 python -m pip install --index-url https://download.pytorch.org/whl/cpu "torch==2.5.1+cpu" "torchvision==0.20.1+cpu"
 
-# Install application dependencies
+# Install dependencies
 pip install -r requirements.txt
 
-# Start the server
+# Start backend
 python -m uvicorn main:app --reload --port 8000
 ```
-*Backend runs at http://localhost:8000 by default.*
+
+Backend: [http://localhost:8000](http://localhost:8000)
 
 ### 3. Frontend Setup
+
+Open another terminal:
+
 ```bash
-cd ../frontend
-# Install packages
+cd frontend
+
 npm ci
 
-# Start the application
 npm run dev
 ```
-*Frontend runs at http://localhost:3000 by default.*
 
-## Usage
+Frontend: [http://localhost:3000](http://localhost:3000)
 
-1. Open http://localhost:3000 in your browser.
-2. Click Add Camera to add a camera source:
-   - Webcam index: 0 or 1
-   - IP Camera / Stream: rtsp://user:password@ip_address:554/stream
-3. Go to Settings to configure Telegram, Email, and dynamic AI threshold options.
-4. Alerts are emitted after the configured confidence, region, confirmation and cooldown policy passes. The bundled model detects fire; smoke requires a smoke-capable model.
+### 4. Windows Quick Start
 
-Keep the backend working directory at `backend`: the database and snapshots are relative to that directory. Cloud machines usually have no webcam; configure a reachable stream or local video source instead.
+Alternatively, run:
 
-To load your own trusted local model, set `FIRE_MODEL_PATH` before starting the backend. Check `/model` or the settings screen for actual supported classes. A different model must be evaluated on labeled fire, smoke and negative examples before relying on it.
+```bash
+start.bat
+```
 
-For browser deployments outside the backend host, configure `NEXT_PUBLIC_API_URL` and `NEXT_PUBLIC_WS_URL` before building the frontend, and configure matching backend CORS origins.
+This starts the backend and frontend using the provided Windows startup script.
 
-## Development checks
+## 🚀 How to Use
+
+1. Start the backend and frontend.
+2. Open [http://localhost:3000](http://localhost:3000).
+3. Navigate to the camera dashboard.
+4. Click **Add Camera**.
+5. Add a webcam using index `0` or configure an IP camera using an RTSP stream.
+6. Configure AI thresholds and notification settings.
+7. Monitor live camera feeds and review detection events.
+
+## ⚙️ Configuration
+
+For custom model loading, configure:
+
+```powershell
+$env:FIRE_MODEL_PATH="path\to\your\model.pt"
+```
+
+Check the `/model` endpoint or Settings screen to verify the classes supported by the loaded model.
+
+For remote frontend deployments, configure:
+
+```env
+NEXT_PUBLIC_API_URL=
+NEXT_PUBLIC_WS_URL=
+```
+
+Configure matching CORS origins on the backend.
+
+## 🔬 Development & Testing
+
+Backend tests:
 
 ```bash
 cd backend
-venv/bin/python -m unittest discover -s tests -v
-cd ../frontend
+python -m unittest discover -s tests -v
+```
+
+Frontend checks:
+
+```bash
+cd frontend
 npm run lint
 npm run build
 ```
 
-Research sources, implemented gaps and remaining development work are listed in [the feature comparison](docs/feature-research.md).
+## 📌 Future Improvements
 
-## License
+- Integration of a validated fire and smoke detection model.
+- Improved detection accuracy in challenging lighting conditions.
+- Cloud-based camera monitoring.
+- Mobile notifications and remote monitoring.
+- Advanced analytics and incident reporting.
+- Further optimization for low-resource devices.
 
-Distributed under the MIT License. See LICENSE for more information.
+## 👨‍💻 Developer
 
----
-## Contributors
+**Atharva Pawar, Sagar Kumar , Dheeraj Alanka&#x20;**
 
-- [vahapogut](https://github.com/vahapogut)
+B.Tech Computer Science & Engineering
+Indian Institute of Information Technology, Raichur
+
+- GitHub: [@Atharva-p82](https://github.com/Atharva-p82)
+- Project Repository: [AI-fire-detection](https://github.com/Atharva-p82/AI-fire-detection)
+- Live Demo: [Fire Guard ](https://ai-fire-detection-drab.vercel.app/)
