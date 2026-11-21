@@ -58,7 +58,7 @@ Fire Guard AI is an AI-powered camera monitoring and fire detection platform des
 
 - Telegram notifications with incident photographs.
 - Email-based incident reports.
-- Configurable alarm cooldown to prevent repeated notifications.
+- Per-camera notification-attempt cooldown configurable through `ai_cooldown_seconds` (research branch); event creation is separate.
 - Integrated siren alerts.
 
 ## 🛠️ Technology Stack
@@ -239,3 +239,16 @@ Indian Institute of Information Technology, Raichur
 - GitHub: [@Atharva-p82](https://github.com/Atharva-p82)
 - Project Repository: [AI-fire-detection](https://github.com/Atharva-p82/AI-fire-detection)
 - Live Demo: [Fire Guard ](https://ai-fire-detection-drab.vercel.app/)
+
+
+## 🧪 Research Evaluation Branch
+
+The `research-evaluation-kit` branch contains an offline experimental IoU-linked temporal verifier and a reproducible video event benchmark. The verifier is a research comparator; it is **not enabled in live camera alerting**.
+
+- [Research evaluation protocol](docs/RESEARCH_EVALUATION_PROTOCOL.md)
+- [Offline benchmark script](evaluation/run_video_benchmark.py)
+- [Experimental temporal verifier](backend/experimental_tracking.py)
+
+The benchmark compares the existing class-level persistence rule with an IoU-linked alternative on the same sampled detector outputs. It can calculate event precision, event recall, event F1, false alerts per camera-hour and detection delay when a ground-truth event CSV is provided. It does not calculate detector mAP.
+
+No benchmark performance result is claimed until a labelled held-out video set is evaluated. The bundled checkpoint currently supports Fire only; do not claim smoke detection with it.
