@@ -221,9 +221,19 @@ def main():
     if not videos: ap.error("No supported videos found")
     if len({v.name for v in videos}) != len(videos): ap.error("Video filenames must be unique")
     truth, rois = read_events(args.events), read_rois(args.roi_json)
+    video_names = {video.name for video in videos}
+    if truth is not None:
+        unknown_videos = sorted({event["video"] for event in truth} - video_names)
+        if unknown_videos:
+            raise ValueError(f"Ground-truth CSV contains videos not present in --videos input: {unknown_videos}")
     model_path = Path(os.environ.get("FIRE_MODEL_PATH", BACKEND / "best.pt")).expanduser().resolve()
     if not model_path.is_file(): raise FileNotFoundError(f"Checkpoint missing: {model_path}")
     detector = FireDetector(str(model_path))
+    if truth is not None:
+        loaded_classes = {str(name).strip().lower() for name in detector.model_info()["classes"]}
+        unknown_classes = sorted({event["class"] for event in truth} - loaded_classes)
+        if unknown_classes:
+            raise ValueError(f"Ground-truth classes {unknown_classes} are not in loaded checkpoint classes {sorted(loaded_classes)}")
     args.output.mkdir(parents=True, exist_ok=True)
     metadata = {"created_utc": datetime.now(timezone.utc).isoformat(),
                 "model_path": str(model_path), "model_sha256": sha256(model_path),
