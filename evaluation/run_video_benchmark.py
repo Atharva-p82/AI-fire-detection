@@ -186,7 +186,7 @@ def score_events(predicted, truth, duration_by_video, tolerance_ms):
     f1 = 2*precision*recall/(precision+recall) if precision+recall else 0.0
     return {"event_tp": tp, "event_fp": fp, "event_fn": fn,
             "event_precision": precision, "event_recall": recall, "event_f1": f1,
-            "false_alerts_per_camera_hour": fp/hours if hours else None,
+            "false_alerts_per_video_hour": fp/hours if hours else None,
             "matched_detection_delay_median_ms": statistics.median(delays) if delays else None,
             "matched_detection_delay_p95_ms": percentile(delays, 95),
             "monitored_camera_hours": hours, "matches": matches}
