@@ -7,6 +7,9 @@ FURG repository: https://github.com/steffensbola/furg-fire-dataset
 
 The FURG README describes a video dataset with one XML annotation file per video; each XML contains frame-numbered flame bounding boxes. The repository declares CC0-1.0. This is a practical pilot dataset because the clips and annotations are directly available from GitHub and do not require the MIVIA registration route.
 
+## Annotation conversion check
+The first successful XML conversion processed all 23 annotation files: 17 videos contained flame bounding boxes, 6 contained no flame boxes, and 34 fire-event intervals were derived. These are counts from the dataset annotations only, not detection results or evidence of accuracy. The six videos without flame boxes should be described as unannotated/no-box clips unless their negative status is independently confirmed.
+
 ## Important limitations
 - This is a small exploratory pilot, not a large or definitive benchmark.
 - The bundled `best.pt` checkpoint's training-data provenance is undocumented. It is therefore not possible to prove that FURG videos were excluded from the model's training data. Report this limitation explicitly.
