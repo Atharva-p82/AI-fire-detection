@@ -34,6 +34,16 @@ backend\\venv\\Scripts\\python.exe -m pip install -r backend\\requirements.txt
 \`\`\`
 This is the CPU setup. Do not replace a working CUDA setup with CPU-only packages. Verify that \`backend\\best.pt\` exists before benchmarking.
 
+### 3. One-command pilot (after Python setup)
+The branch includes a Windows script that downloads FURG if needed, converts the annotations, and runs the first benchmark configuration:
+
+```powershell
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+.\evaluation\run_furg_pilot.ps1
+```
+
+It expects `backend\\venv\\Scripts\\python.exe` to exist from Step 2. It writes results to `evaluation/furg_pilot_results`.
+
 ### 3. Download the FURG videos and XML annotations
 \`\`\`powershell
 git clone --depth 1 https://github.com/steffensbola/furg-fire-dataset.git evaluation\\furg_fire_dataset
