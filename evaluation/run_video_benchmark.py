@@ -221,11 +221,19 @@ def main():
     if not videos: ap.error("No supported videos found")
     if len({v.name for v in videos}) != len(videos): ap.error("Video filenames must be unique")
     truth, rois = read_events(args.events), read_rois(args.roi_json)
-    video_names = {video.name for video in videos}
+    # Normalize annotation video names against the actual files. The FURG XML
+    # metadata uses Car2.mp4 / Car3.mp4 while the repository stores car2.mp4 /
+    # car3.mp4; Linux paths are case-sensitive.
+    video_name_lookup = {video.name.casefold(): video.name for video in videos}
     if truth is not None:
-        unknown_videos = sorted({event["video"] for event in truth} - video_names)
+        unknown_videos = sorted({
+            event["video"] for event in truth
+            if event["video"].casefold() not in video_name_lookup
+        })
         if unknown_videos:
             raise ValueError(f"Ground-truth CSV contains videos not present in --videos input: {unknown_videos}")
+        for event in truth:
+            event["video"] = video_name_lookup[event["video"].casefold()]
     model_path = Path(os.environ.get("FIRE_MODEL_PATH", BACKEND / "best.pt")).expanduser().resolve()
     if not model_path.is_file(): raise FileNotFoundError(f"Checkpoint missing: {model_path}")
     detector = FireDetector(str(model_path))
