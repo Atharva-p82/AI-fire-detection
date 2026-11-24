@@ -1,5 +1,12 @@
 # Fire Guard AI research evaluation protocol
 
+## Fast pilot dataset option (FURG)
+For a quick exploratory run without waiting for dataset registration, use the public FURG fire-video repository: https://github.com/steffensbola/furg-fire-dataset. Its README describes MP4 clips with corresponding OpenCV XML annotations containing per-frame flame bounding boxes; the repository declares a CC0-1.0 licence.
+
+This branch includes `evaluation/prepare_furg_events.py` to derive event intervals from first/last annotated frames, merging short gaps. Follow [docs/FAST_PILOT_EVALUATION.md](FAST_PILOT_EVALUATION.md) for Windows commands.
+
+This is a small pilot dataset. The bundled checkpoint's training provenance is unknown, so possible overlap with training data cannot be excluded. Report results as exploratory. The benchmark outputs false alerts per video-hour (not camera-hour), since the input is prerecorded video clips. The script does not calculate spatial box metrics or mAP.
+
 ## Purpose and evidence boundary
 This branch adds an offline comparison between the existing class-level persistence rule and an experimental IoU-linked verifier. The verifier is NOT integrated into live alerts. The evaluation script runs the detector once on sampled video frames, then replays the same detections through both policies. It reports event-level metrics only; it does not train a detector or compute mAP.
 
@@ -78,7 +85,7 @@ Keep all output files with the report. They are the reproducibility record.
 - Event precision = matched predicted events / all predicted events.
 - Event recall = matched ground-truth events / all ground-truth events.
 - Event F1 = harmonic mean of event precision and recall.
-- False alerts per camera-hour = unmatched predicted events / monitored video hours.
+- False alerts per video-hour = unmatched predicted events / total monitored video duration. This is an offline video-dataset rate, not a live camera-hour rate.
 - Detection delay = predicted event start - annotated first-visible time for a matched event.
 
 The matching rule accepts a prediction from the ground-truth start through ground-truth end plus the configured tolerance. Report this tolerance. Event precision is not frame-level detector precision. This script does not calculate bounding-box precision/recall or mAP@0.5 / mAP@0.5:0.95. Those require frame-level boxes and a separate object-detection evaluation.
