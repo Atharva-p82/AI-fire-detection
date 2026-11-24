@@ -109,7 +109,13 @@ def main():
             raise ValueError(f"Duplicate video annotation filename: {video_name}")
         seen_videos.add(video_name)
 
-        video_candidates = list(args.dataset.rglob(video_name))
+        # The upstream FURG XML sometimes capitalizes a filename differently
+        # from its MP4 counterpart (e.g. Car2.mp4 vs car2.mp4). Linux runners
+        # are case-sensitive, so match basenames case-insensitively.
+        video_candidates = [
+            candidate for candidate in args.dataset.rglob("*")
+            if candidate.is_file() and candidate.name.casefold() == video_name.casefold()
+        ]
         if not video_candidates:
             missing_videos.append(video_name)
             continue
