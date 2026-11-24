@@ -203,6 +203,12 @@ NEXT_PUBLIC_WS_URL=
 
 Configure matching CORS origins on the backend.
 
+## ⚡ Fast Pilot Evaluation
+
+A short event-level pilot can be run on the public FURG fire-video dataset. See [docs/FAST_PILOT_EVALUATION.md](docs/FAST_PILOT_EVALUATION.md) for the download, XML-to-event conversion and benchmark commands.
+
+The helper `evaluation/prepare_furg_events.py` converts the dataset's per-frame XML flame boxes into event intervals for `evaluation/run_video_benchmark.py`. The benchmark reports event-level metrics and false alerts per video-hour, not detector mAP. Because the bundled checkpoint's training-data provenance is unknown, overlap with FURG cannot be ruled out; describe results as exploratory pilot measurements, not independent generalization results.
+
 ## 🔬 Development & Testing
 
 Backend tests:
